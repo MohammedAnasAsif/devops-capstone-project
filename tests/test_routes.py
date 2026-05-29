@@ -12,12 +12,14 @@ from tests.factories import AccountFactory
 from service.common import status  # HTTP Status Codes
 from service.models import db, Account, init_db
 from service.routes import app
+from service import talisman
 
 DATABASE_URI = os.getenv(
     "DATABASE_URI", "postgresql://postgres:postgres@localhost:5432/postgres"
 )
 
 BASE_URL = "/accounts"
+HTTPS_ENVIRON = {'wsgi.url_scheme': 'https'}
 
 
 ######################################################################
@@ -35,13 +37,15 @@ class TestAccountService(TestCase):
         app.logger.setLevel(logging.CRITICAL)
         init_db(app)
 
+        talisman.force_https = False
+
     @classmethod
     def tearDownClass(cls):
         """Runs once before test suite"""
 
     def setUp(self):
         """Runs before each test"""
-        db.session.query(Account).delete()  # clean up the last tests
+        db.session.query(Account).delete()
         db.session.commit()
 
         self.client = app.test_client()
@@ -51,7 +55,52 @@ class TestAccountService(TestCase):
         db.session.remove()
 
     ######################################################################
-    #  H E L P E R   M E T H O D S
+    # SECURITY TESTS
+    ######################################################################
+
+    def test_security_headers(self):
+        """It should return security headers"""
+
+        response = self.client.get(
+            "/",
+            environ_overrides=HTTPS_ENVIRON
+        )
+
+        self.assertEqual(
+            response.headers["X-Frame-Options"],
+            "SAMEORIGIN"
+        )
+
+        self.assertEqual(
+            response.headers["X-Content-Type-Options"],
+            "nosniff"
+        )
+
+        self.assertEqual(
+            response.headers["Content-Security-Policy"],
+            "default-src 'self'; object-src 'none'"
+        )
+
+        self.assertEqual(
+            response.headers["Referrer-Policy"],
+            "strict-origin-when-cross-origin"
+        )
+
+    def test_cors_headers(self):
+        """It should return CORS headers"""
+
+        response = self.client.get(
+            "/",
+            environ_overrides=HTTPS_ENVIRON
+        )
+
+        self.assertEqual(
+            response.headers["Access-Control-Allow-Origin"],
+            "*"
+        )
+
+    ######################################################################
+    # HELPER METHODS
     ######################################################################
 
     def _create_accounts(self, count):
@@ -71,7 +120,7 @@ class TestAccountService(TestCase):
         return accounts
 
     ######################################################################
-    #  A C C O U N T   T E S T   C A S E S
+    # ACCOUNT TEST CASES
     ######################################################################
 
     def test_index(self):
@@ -96,11 +145,9 @@ class TestAccountService(TestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
-        # Make sure location header is set
         location = response.headers.get("Location", None)
         self.assertIsNotNone(location)
 
-        # Check the data is correct
         new_account = response.get_json()
         self.assertEqual(new_account["name"], account.name)
         self.assertEqual(new_account["email"], account.email)
@@ -121,6 +168,9 @@ class TestAccountService(TestCase):
             json=account.serialize(),
             content_type="test/html"
         )
-        self.assertEqual(response.status_code, status.HTTP_415_UNSUPPORTED_MEDIA_TYPE)
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_415_UNSUPPORTED_MEDIA_TYPE
+        )
 
     # ADD YOUR TEST CASES HERE ...
