@@ -123,4 +123,82 @@ class TestAccountService(TestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_415_UNSUPPORTED_MEDIA_TYPE)
 
-    # ADD YOUR TEST CASES HERE ...
+    def test_list_accounts(self):
+        """It should Get a list of Accounts"""
+        self._create_accounts(5)
+
+        response = self.client.get(BASE_URL)
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK
+        )
+
+        data = response.get_json()
+        self.assertEqual(len(data), 5)
+
+    def test_get_account(self):
+        """It should Get a single Account"""
+        test_account = self._create_accounts(1)[0]
+
+        response = self.client.get(
+            f"{BASE_URL}/{test_account.id}"
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK
+        )
+
+        data = response.get_json()
+
+        self.assertEqual(
+            data["name"],
+            test_account.name
+        )
+    def test_update_account(self):
+        """It should Update an existing Account"""
+        test_account = self._create_accounts(1)[0]
+
+        new_data = test_account.serialize()
+        new_data["phone_number"] = "555-1111"
+
+        response = self.client.put(
+            f"{BASE_URL}/{test_account.id}",
+            json=new_data,
+            content_type="application/json"
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK
+        )
+
+        data = response.get_json()
+
+        self.assertEqual(
+            data["phone_number"],
+            "555-1111"
+        )
+
+    def test_delete_account(self):
+        """It should Delete an Account"""
+        test_account = self._create_accounts(1)[0]
+
+        response = self.client.delete(
+            f"{BASE_URL}/{test_account.id}"
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_204_NO_CONTENT
+        )
+
+        response = self.client.get(
+            f"{BASE_URL}/{test_account.id}"
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_404_NOT_FOUND
+        )
